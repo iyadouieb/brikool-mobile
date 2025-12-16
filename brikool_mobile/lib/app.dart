@@ -1,6 +1,7 @@
+import 'package:brikool_mobile/features/auth/auth_gate.dart';
 import 'package:flutter/material.dart';
 import 'core/theme/app_theme.dart';
-import 'features/home/home_screen.dart';
+
 
 class BrikoolApp extends StatelessWidget {
   const BrikoolApp({super.key});
@@ -11,7 +12,7 @@ class BrikoolApp extends StatelessWidget {
       title: 'BRIKOOL',
       debugShowCheckedModeBanner: true,
       theme: AppTheme.lightTheme,
-      home: const HomeScreen(),
+      home: const AuthGate(),
     );
   }
 }
