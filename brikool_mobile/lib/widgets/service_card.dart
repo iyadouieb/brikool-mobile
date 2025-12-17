@@ -2,38 +2,39 @@ import 'package:flutter/material.dart';
 import '../core/constants/services.dart';
 
 class ServiceCard extends StatelessWidget {
-  final Service service;
+  final ServiceCategory category;
+  final VoidCallback? onTap;
 
-  const ServiceCard({super.key, required this.service});
+  const ServiceCard({
+    super.key,
+    required this.category,
+    this.onTap,
+  });
 
   @override
   Widget build(BuildContext context) {
     return InkWell(
+      onTap: onTap,
       borderRadius: BorderRadius.circular(16),
-      onTap: () {
-        // later: navigate to request screen
-      },
       child: Container(
         decoration: BoxDecoration(
-          color: Colors.white,
+          color: Theme.of(context).colorScheme.surface,
           borderRadius: BorderRadius.circular(16),
-          boxShadow: [
-            BoxShadow(
-              color: Colors.black.withOpacity(0.05),
-              blurRadius: 10,
-              offset: const Offset(0, 4),
-            ),
-          ],
         ),
+        padding: const EdgeInsets.all(16),
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            Text(service.icon, style: const TextStyle(fontSize: 36)),
+            Icon(
+              category.icon,
+              size: 36,
+              color: Theme.of(context).colorScheme.primary,
+            ),
             const SizedBox(height: 12),
             Text(
-              service.name,
+              category.title,
               textAlign: TextAlign.center,
-              style: const TextStyle(fontWeight: FontWeight.w600),
+              style: Theme.of(context).textTheme.bodyMedium,
             ),
           ],
         ),
