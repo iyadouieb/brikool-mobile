@@ -1,7 +1,8 @@
+import 'package:brikool_mobile/features/requests/client_requests_screen.dart';
 import 'package:flutter/material.dart';
 import '../../core/constants/services.dart';
 import '../../widgets/service_card.dart';
-import '../profile/profile_screen.dart';
+import '../profile/client_profile_screen.dart';
 import '../requests/job_request_screen.dart';
 
 
@@ -59,7 +60,7 @@ class _ClientHomeScreenState extends State<ClientHomeScreen> {
       case 1:
         return const Center(child: Text('Search – coming soon'));
       case 2:
-        return const Center(child: Text('Requests – coming soon'));
+        return const ClientRequestsScreen();
       case 3:
         return const ProfileScreen();
       default:

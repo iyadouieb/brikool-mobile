@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
+
 
 class LoginScreen extends StatefulWidget {
   const LoginScreen({super.key});
@@ -15,6 +17,7 @@ class _LoginScreenState extends State<LoginScreen> {
   bool loading = false;
 
   Future<void> submit() async {
+    if (!mounted) return;
     setState(() => loading = true);
 
     try {
@@ -24,22 +27,34 @@ class _LoginScreenState extends State<LoginScreen> {
           password: passwordController.text.trim(),
         );
       } else {
-        await FirebaseAuth.instance.createUserWithEmailAndPassword(
+        final cred = await FirebaseAuth.instance
+            .createUserWithEmailAndPassword(
           email: emailController.text.trim(),
           password: passwordController.text.trim(),
         );
+
+        final uid = cred.user!.uid;
+
+        // ✅ CREATE USER DOCUMENT
+        await FirebaseFirestore.instance
+            .collection('users')
+            .doc(uid)
+            .set({
+          'email': emailController.text.trim(),
+          'role': null,
+          'createdAt': FieldValue.serverTimestamp(),
+        });
       }
     } on FirebaseAuthException catch (e) {
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(e.message ?? 'Auth error')),
-      );
-    } finally {
       if (mounted) {
-        setState(() => loading = false);
+        ScaffoldMessenger.of(context)
+            .showSnackBar(SnackBar(content: Text(e.message ?? 'Auth error')));
       }
+    } finally {
+      if (mounted) setState(() => loading = false);
     }
   }
+
 
   @override
   Widget build(BuildContext context) {

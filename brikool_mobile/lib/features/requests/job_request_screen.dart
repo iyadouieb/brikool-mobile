@@ -2,6 +2,10 @@ import 'package:flutter/material.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:flutter_map/flutter_map.dart';
 import 'package:latlong2/latlong.dart';
+import 'package:firebase_auth/firebase_auth.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
+import 'request_details_screen.dart';
+
 
 class JobRequestScreen extends StatefulWidget {
   final String category;
@@ -16,7 +20,6 @@ class _JobRequestScreenState extends State<JobRequestScreen> {
   final TextEditingController descriptionController =
       TextEditingController();
 
-  String? address;
   DateTime? selectedDate;
   bool urgent = false;
   bool loadingLocation = true;
@@ -63,11 +66,12 @@ class _JobRequestScreenState extends State<JobRequestScreen> {
     } catch (e) {
       debugPrint('LOCATION ERROR: $e');
       setState(() {
-        address = 'Unable to detect location';
         loadingLocation = false;
       });
     }
   }
+
+  
 
 
   Future<void> pickDate() async {
@@ -84,7 +88,7 @@ class _JobRequestScreenState extends State<JobRequestScreen> {
     }
   }
 
-  void _submitRequest() {
+  Future<void> _submitRequest() async {
     if (descriptionController.text.trim().isEmpty) {
       _showMessage('Please describe the job');
       return;
@@ -95,13 +99,41 @@ class _JobRequestScreenState extends State<JobRequestScreen> {
       return;
     }
 
-    if (address == null) {
+    if (selectedLocation == null) {
       _showMessage('Location required');
       return;
     }
 
-    _showMessage('Searching for nearby professionals...');
+    try {
+      final user = FirebaseAuth.instance.currentUser!;
+      final doc = await FirebaseFirestore.instance.collection('jobs').add({
+        'clientId': user.uid,
+        'category': widget.category,
+        'description': descriptionController.text.trim(),
+        'urgent': urgent,
+        'status': 'open',
+        'preferredDate': urgent ? null : selectedDate,
+        'location': {
+          'lat': selectedLocation!.latitude,
+          'lng': selectedLocation!.longitude,
+        },
+        'createdAt': FieldValue.serverTimestamp(),
+      });
+
+      if (!mounted) return;
+
+      Navigator.pushReplacement(
+        context,
+        MaterialPageRoute(
+          builder: (_) => RequestDetailsScreen(jobId: doc.id),
+        ),
+      );
+    } catch (e) {
+      _showMessage('Failed to submit job');
+    }
   }
+
+
 
   void _showMessage(String msg) {
     ScaffoldMessenger.of(context)
@@ -173,9 +205,9 @@ class _JobRequestScreenState extends State<JobRequestScreen> {
                                           point: selectedLocation!,
                                           width: 40,
                                           height: 40,
-                                          child: const Icon(
+                                          child: Icon(
                                             Icons.location_pin,
-                                            color: Colors.red,
+                                            color: Theme.of(context).colorScheme.secondary,
                                             size: 40,
                                           ),
                                         ),

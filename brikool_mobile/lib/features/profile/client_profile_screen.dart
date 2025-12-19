@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import '../../core/theme/theme_service.dart';
 
 class ProfileScreen extends StatelessWidget {
   const ProfileScreen({super.key});
@@ -85,6 +86,19 @@ class ProfileScreen extends StatelessWidget {
 
                 const Spacer(),
 
+                ListTile(
+                  leading: const Icon(Icons.brightness_6),
+                  title: const Text('Theme'),
+                  subtitle: ValueListenableBuilder<ThemeMode>(
+                    valueListenable: ThemeService.instance.modeNotifier,
+                    builder: (context, mode, _) {
+                      final label = mode == ThemeMode.light ? 'Light' : mode == ThemeMode.system ? 'System' : 'Dark';
+                      return Text(label);
+                    },
+                  ),
+                  onTap: () => _showThemeDialog(context),
+                ),
+
                 ElevatedButton.icon(
                   onPressed: () async {
                     await FirebaseAuth.instance.signOut();
@@ -100,6 +114,55 @@ class ProfileScreen extends StatelessWidget {
           );
         },
       ),
+    );
+  }
+
+  void _showThemeDialog(BuildContext context) {
+    showDialog<void>(
+      context: context,
+      builder: (context) {
+        return AlertDialog(
+          title: const Text('Choose theme'),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              RadioListTile<ThemeMode>(
+                value: ThemeMode.light,
+                groupValue: ThemeService.instance.modeNotifier.value,
+                title: const Text('Light'),
+                onChanged: (v) {
+                  if (v != null) {
+                    ThemeService.instance.setTheme(v);
+                    Navigator.of(context).pop();
+                  }
+                },
+              ),
+              RadioListTile<ThemeMode>(
+                value: ThemeMode.dark,
+                groupValue: ThemeService.instance.modeNotifier.value,
+                title: const Text('Dark'),
+                onChanged: (v) {
+                  if (v != null) {
+                    ThemeService.instance.setTheme(v);
+                    Navigator.of(context).pop();
+                  }
+                },
+              ),
+              RadioListTile<ThemeMode>(
+                value: ThemeMode.system,
+                groupValue: ThemeService.instance.modeNotifier.value,
+                title: const Text('System'),
+                onChanged: (v) {
+                  if (v != null) {
+                    ThemeService.instance.setTheme(v);
+                    Navigator.of(context).pop();
+                  }
+                },
+              ),
+            ],
+          ),
+        );
+      },
     );
   }
 }

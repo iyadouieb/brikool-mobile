@@ -30,7 +30,7 @@ class _RoleSelectionScreenState extends State<RoleSelectionScreen> {
       child: Container(
         padding: const EdgeInsets.all(20),
         decoration: BoxDecoration(
-          color: isSelected ? Colors.redAccent : Colors.grey.shade900,
+          color: isSelected ? Theme.of(context).colorScheme.secondary : Colors.grey.shade900,
           borderRadius: BorderRadius.circular(16),
         ),
         child: Row(
@@ -62,6 +62,7 @@ class _RoleSelectionScreenState extends State<RoleSelectionScreen> {
                     onPressed: selectedRole == null ? null : saveRole,
                     child: const Text('Continue'),
                   ),
+                  
           ],
         ),
       ),
