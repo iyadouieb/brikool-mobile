@@ -1,15 +1,16 @@
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import '../../widgets/app_logo.dart';
 
 class ProfileCompletionScreen extends StatefulWidget {
   final String role;
-
-  
+  final bool isEdit;
 
   const ProfileCompletionScreen({
     super.key,
     required this.role,
+    this.isEdit = false,
   });
 
   
@@ -83,8 +84,11 @@ class _ProfileCompletionScreenState extends State<ProfileCompletionScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Complete your profile'),
-        automaticallyImplyLeading: false, // prevent going back
+        centerTitle: true,
+        title: AppLogo(),
+        titleTextStyle: Theme.of(context).textTheme.titleLarge,
+        // Allow back navigation when opened for editing
+        automaticallyImplyLeading: widget.isEdit,
       ),
       body: Padding(
         padding: const EdgeInsets.all(16),

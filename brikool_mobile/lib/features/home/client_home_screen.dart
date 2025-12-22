@@ -1,7 +1,10 @@
 import 'package:brikool_mobile/features/requests/client_requests_screen.dart';
 import 'package:flutter/material.dart';
+import 'package:firebase_auth/firebase_auth.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
 import '../../core/constants/services.dart';
 import '../../widgets/service_card.dart';
+import '../../widgets/app_logo.dart';
 import '../profile/client_profile_screen.dart';
 import '../requests/job_request_screen.dart';
 
@@ -21,34 +24,69 @@ class _ClientHomeScreenState extends State<ClientHomeScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text('BRIKOOL'),
         centerTitle: true,
+        title: AppLogo(),
       ),
       body: _buildBody(),
-      bottomNavigationBar: BottomNavigationBar(
-        currentIndex: _currentIndex,
-        onTap: (index) {
-          setState(() => _currentIndex = index);
+      bottomNavigationBar: StreamBuilder<QuerySnapshot?>(
+        stream: FirebaseAuth.instance.currentUser == null
+            ? null
+            : FirebaseFirestore.instance.collection('jobs').where('clientId', isEqualTo: FirebaseAuth.instance.currentUser!.uid).snapshots(),
+        builder: (context, snap) {
+          bool hasNew = false;
+          if (snap.hasData) {
+            final docs = snap.data!.docs;
+            hasNew = docs.any((doc) {
+              final data = doc.data() as Map<String, dynamic>;
+              final clientLastSeen = data['clientLastSeenAt'] as Timestamp?;
+              final offersUpdated = data['offersUpdatedAt'] as Timestamp?;
+              final statusUpdated = data['statusUpdatedAt'] as Timestamp?;
+              final offerIsNew = offersUpdated != null && (clientLastSeen == null || offersUpdated.compareTo(clientLastSeen) > 0);
+              final statusIsNew = statusUpdated != null && (clientLastSeen == null || statusUpdated.compareTo(clientLastSeen) > 0);
+              return offerIsNew || statusIsNew;
+            });
+          }
+
+          return BottomNavigationBar(
+            currentIndex: _currentIndex,
+            onTap: (index) {
+              setState(() => _currentIndex = index);
+            },
+            type: BottomNavigationBarType.fixed,
+            items: [
+              const BottomNavigationBarItem(
+                icon: Icon(Icons.home),
+                label: 'Home',
+              ),
+              const BottomNavigationBarItem(
+                icon: Icon(Icons.search),
+                label: 'Search',
+              ),
+              BottomNavigationBarItem(
+                icon: Stack(
+                  clipBehavior: Clip.none,
+                  children: [
+                    const Icon(Icons.assignment),
+                    if (hasNew)
+                      Positioned(
+                        right: -6,
+                        top: -6,
+                        child: CircleAvatar(
+                          radius: 6,
+                          backgroundColor: Theme.of(context).colorScheme.error,
+                        ),
+                      ),
+                  ],
+                ),
+                label: 'Requests',
+              ),
+              const BottomNavigationBarItem(
+                icon: Icon(Icons.person),
+                label: 'Profile',
+              ),
+            ],
+          );
         },
-        type: BottomNavigationBarType.fixed,
-        items: const [
-          BottomNavigationBarItem(
-            icon: Icon(Icons.home),
-            label: 'Home',
-          ),
-          BottomNavigationBarItem(
-            icon: Icon(Icons.search),
-            label: 'Search',
-          ),
-          BottomNavigationBarItem(
-            icon: Icon(Icons.assignment),
-            label: 'Requests',
-          ),
-          BottomNavigationBarItem(
-            icon: Icon(Icons.person),
-            label: 'Profile',
-          ),
-        ],
       ),
     );
   }

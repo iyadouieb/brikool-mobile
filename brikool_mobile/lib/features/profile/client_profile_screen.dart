@@ -1,7 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import '../../widgets/app_logo.dart';
 import '../../core/theme/theme_service.dart';
+import '../auth/profile_completion_screen.dart';
+import '../requests/request_details_screen.dart';
 
 class ProfileScreen extends StatelessWidget {
   const ProfileScreen({super.key});
@@ -13,8 +16,8 @@ class ProfileScreen extends StatelessWidget {
 
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Profile'),
         centerTitle: true,
+        title: const Text('Profile'),
       ),
       body: FutureBuilder<DocumentSnapshot>(
         future: FirebaseFirestore.instance
@@ -42,75 +45,169 @@ class ProfileScreen extends StatelessWidget {
                   ? 'Unnamed user'
                   : '$firstName $lastName';
 
-          return Padding(
-            padding: const EdgeInsets.all(16),
-            child: Column(
-              children: [
-                const SizedBox(height: 24),
+          return CustomScrollView(
+            slivers: [
+              SliverToBoxAdapter(
+                child: Padding(
+                  padding: const EdgeInsets.all(16),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Center(
+                        child: Column(
+                          children: [
+                            CircleAvatar(radius: 44, child: Text(fullName[0].toUpperCase(), style: const TextStyle(fontSize: 36))),
+                            const SizedBox(height: 12),
+                            Text(fullName, style: Theme.of(context).textTheme.headlineSmall),
+                            const SizedBox(height: 6),
+                            Text('Client', style: Theme.of(context).textTheme.bodyMedium?.copyWith(color: Colors.grey)),
+                            const SizedBox(height: 12),
 
-                // Avatar
-                CircleAvatar(
-                  radius: 40,
-                  child: Text(
-                    fullName[0].toUpperCase(),
-                    style: const TextStyle(fontSize: 32),
+                            // Ratings and quick actions
+                            Row(
+                              mainAxisAlignment: MainAxisAlignment.center,
+                              children: [
+                                StreamBuilder<QuerySnapshot>(
+                                  stream: FirebaseFirestore.instance
+                                      .collection('jobs')
+                                      .where('clientId', isEqualTo: uid)
+                                      .where('clientRating', isGreaterThan: 0)
+                                      .snapshots(),
+                                  builder: (context, snap) {
+                                    if (!snap.hasData || snap.data!.docs.isEmpty) return const SizedBox.shrink();
+                                    final docs = snap.data!.docs;
+                                    double sum = 0;
+                                    for (final d in docs) {
+                                      final data = d.data() as Map<String, dynamic>;
+                                      final r = data['clientRating'];
+                                      if (r is num) sum += r.toDouble();
+                                    }
+                                    final avg = (sum / docs.length);
+                                    return Row(
+                                      children: [
+                                        const Icon(Icons.star, color: Colors.amber),
+                                        const SizedBox(width: 6),
+                                        Text(avg.toStringAsFixed(1)),
+                                        const SizedBox(width: 6),
+                                        Text('(${docs.length})', style: const TextStyle(color: Colors.grey)),
+                                      ],
+                                    );
+                                  },
+                                ),
+                                const SizedBox(width: 16),
+                                OutlinedButton.icon(
+                                  onPressed: () {
+                                    Navigator.push(context, MaterialPageRoute(builder: (_) => ProfileCompletionScreen(role: 'client', isEdit: true)));
+                                  },
+                                  icon: const Icon(Icons.edit),
+                                  label: const Text('Edit'),
+                                ),
+                              ],
+                            ),
+                          ],
+                        ),
+                      ),
+
+                      const SizedBox(height: 12),
+
+                      Card(
+                        elevation: 1,
+                        child: Padding(
+                          padding: const EdgeInsets.all(12),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text('Contact', style: Theme.of(context).textTheme.titleMedium),
+                              const SizedBox(height: 8),
+                              Text('Email: ${user.email ?? ''}'),
+                              const SizedBox(height: 6),
+                              Text('Phone: $phone'),
+                              const SizedBox(height: 8),
+                              Chip(label: Text(role.toString().toUpperCase())),
+                            ],
+                          ),
+                        ),
+                      ),
+
+                      const SizedBox(height: 12),
+
+                      ListTile(
+                        leading: const Icon(Icons.brightness_6),
+                        title: const Text('Theme'),
+                        subtitle: ValueListenableBuilder<ThemeMode>(
+                          valueListenable: ThemeService.instance.modeNotifier,
+                          builder: (context, mode, _) {
+                            final label = mode == ThemeMode.light ? 'Light' : mode == ThemeMode.system ? 'System' : 'Dark';
+                            return Text(label);
+                          },
+                        ),
+                        onTap: () => _showThemeDialog(context),
+                      ),
+
+                      ElevatedButton.icon(
+                        onPressed: () async {
+                          await FirebaseAuth.instance.signOut();
+                        },
+                        icon: const Icon(Icons.logout),
+                        label: const Text('Logout'),
+                        style: ElevatedButton.styleFrom(minimumSize: const Size.fromHeight(48)),
+                      ),
+                    ],
                   ),
                 ),
+              ),
 
-                const SizedBox(height: 16),
-
-                Text(
-                  fullName,
-                  style: Theme.of(context).textTheme.headlineSmall,
+              SliverToBoxAdapter(
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                  child: Text('Recent requests', style: Theme.of(context).textTheme.titleMedium),
                 ),
+              ),
 
-                const SizedBox(height: 8),
+              StreamBuilder<QuerySnapshot>(
+                stream: FirebaseFirestore.instance
+                    .collection('jobs')
+                    .where('clientId', isEqualTo: uid)
+                    .orderBy('createdAt', descending: true)
+                    .limit(5)
+                    .snapshots(),
+                builder: (context, snap) {
+                  if (!snap.hasData) return const SliverToBoxAdapter(child: SizedBox.shrink());
+                  final docs = snap.data!.docs;
+                  if (docs.isEmpty) return const SliverToBoxAdapter(child: Padding(padding: EdgeInsets.symmetric(horizontal: 16, vertical: 12), child: Text('No recent requests')));
 
-                Text(
-                  user.email ?? '',
-                  style: Theme.of(context).textTheme.bodyMedium,
-                ),
+                  return SliverList(
+                    delegate: SliverChildBuilderDelegate((context, index) {
+                      final doc = docs[index];
+                      final d = doc.data() as Map<String, dynamic>;
+                      final category = d['category'] ?? 'Unknown';
+                      final status = d['status'] ?? '';
+                      final createdAt = d['createdAt'] as Timestamp?;
 
-                const SizedBox(height: 8),
+                      String dateText = '';
+                      if (createdAt != null) {
+                        final dt = createdAt.toDate();
+                        dateText = '${dt.day}/${dt.month}/${dt.year}';
+                      }
 
-                Text(
-                  phone,
-                  style: Theme.of(context).textTheme.bodyMedium,
-                ),
-
-                const SizedBox(height: 12),
-
-                Chip(
-                  label: Text(role.toString().toUpperCase()),
-                ),
-
-                const Spacer(),
-
-                ListTile(
-                  leading: const Icon(Icons.brightness_6),
-                  title: const Text('Theme'),
-                  subtitle: ValueListenableBuilder<ThemeMode>(
-                    valueListenable: ThemeService.instance.modeNotifier,
-                    builder: (context, mode, _) {
-                      final label = mode == ThemeMode.light ? 'Light' : mode == ThemeMode.system ? 'System' : 'Dark';
-                      return Text(label);
-                    },
-                  ),
-                  onTap: () => _showThemeDialog(context),
-                ),
-
-                ElevatedButton.icon(
-                  onPressed: () async {
-                    await FirebaseAuth.instance.signOut();
-                  },
-                  icon: const Icon(Icons.logout),
-                  label: const Text('Logout'),
-                  style: ElevatedButton.styleFrom(
-                    minimumSize: const Size.fromHeight(48),
-                  ),
-                ),
-              ],
-            ),
+                      return Padding(
+                        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
+                        child: Card(
+                          child: ListTile(
+                            title: Text(category, style: const TextStyle(fontWeight: FontWeight.bold)),
+                            subtitle: Text('$status · $dateText'),
+                            trailing: const Icon(Icons.chevron_right),
+                            onTap: () {
+                              Navigator.push(context, MaterialPageRoute(builder: (_) => RequestDetailsScreen(jobId: doc.id)));
+                            },
+                          ),
+                        ),
+                      );
+                    }, childCount: docs.length),
+                  );
+                },
+              ),
+            ],
           );
         },
       ),

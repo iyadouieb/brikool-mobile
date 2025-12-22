@@ -4,6 +4,7 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter_map/flutter_map.dart';
 import 'package:latlong2/latlong.dart';
 import 'package:url_launcher/url_launcher.dart';
+import '../../widgets/app_logo.dart';
 
 class RequestDetailsScreen extends StatefulWidget {
   final String jobId;
@@ -16,6 +17,26 @@ class RequestDetailsScreen extends StatefulWidget {
 
 class _RequestDetailsScreenState extends State<RequestDetailsScreen> {
   bool _submitting = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _markClientSeenOnOpen();
+  }
+
+  Future<void> _markClientSeenOnOpen() async {
+    final user = FirebaseAuth.instance.currentUser;
+    if (user == null) return;
+    final jobRef = FirebaseFirestore.instance.collection('jobs').doc(widget.jobId);
+    final snap = await jobRef.get();
+    if (!snap.exists) return;
+    final data = snap.data();
+    if (data == null) return;
+    final clientId = data['clientId'] as String?;
+    if (clientId == user.uid) {
+      await jobRef.update({'clientLastSeenAt': FieldValue.serverTimestamp()});
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -71,6 +92,8 @@ class _RequestDetailsScreenState extends State<RequestDetailsScreen> {
                 fab = _submitting
                     ? FloatingActionButton(
                         onPressed: null,
+                        backgroundColor: Theme.of(context).colorScheme.secondary,
+                        foregroundColor: Theme.of(context).colorScheme.onSecondary,
                         child: const SizedBox(
                           width: 20,
                           height: 20,
@@ -81,27 +104,92 @@ class _RequestDetailsScreenState extends State<RequestDetailsScreen> {
                         onPressed: _showMakeOfferDialog,
                         label: const Text('Make Offer'),
                         icon: const Icon(Icons.send),
+                        backgroundColor: Theme.of(context).colorScheme.secondary,
+                        foregroundColor: Theme.of(context).colorScheme.onSecondary,
                       );
               }
             }
 
             return Scaffold(
-              appBar: AppBar(title: const Text('Job details')),
+              appBar: AppBar(
+                centerTitle: true,
+                title: AppLogo(),
+              ),
               floatingActionButton: fab,
-              body: SingleChildScrollView(
-                padding: const EdgeInsets.all(16),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    _jobHeader(context, data),
-                    const SizedBox(height: 12),
-                    _statusIndicator(data, isClient),
-                    const SizedBox(height: 12),
-                    _offersSection(jobRef, isProvider, data),
-                    const SizedBox(height: 24),
-                    if (!isProvider && status == 'assigned') _assignedInfo(data),
-                  ],
-                ),
+              body: CustomScrollView(
+                slivers: [
+                  SliverToBoxAdapter(
+                    child: Padding(
+                      padding: const EdgeInsets.all(16),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          _jobHeader(context, data),
+                          const SizedBox(height: 12),
+                          _statusIndicator(data, isClient),
+                          const SizedBox(height: 12),
+                        ],
+                      ),
+                    ),
+                  ),
+
+                  // Offers (as a Sliver)
+                  _offersSliver(jobRef, isProvider, data),
+
+                  if (!isProvider && status == 'assigned')
+                    SliverToBoxAdapter(
+                      child: Padding(
+                        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                        child: _assignedInfo(data),
+                      ),
+                    ),
+
+                  // Rating actions for completed jobs
+                  if (status == 'completed')
+                    SliverToBoxAdapter(
+                      child: Padding(
+                        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.stretch,
+                          children: [
+                            if (isClient && data['providerRating'] == null)
+                              ElevatedButton.icon(
+                                onPressed: () => _showRatingDialog(jobRef, target: 'provider'),
+                                icon: const Icon(Icons.star),
+                                label: const Text('Rate provider'),
+                              ),
+                            if (isProvider && isAssignedToCurrentProvider && data['clientRating'] == null)
+                              ElevatedButton.icon(
+                                onPressed: () => _showRatingDialog(jobRef, target: 'client'),
+                                icon: const Icon(Icons.star),
+                                label: const Text('Rate client'),
+                              ),
+
+                            // Show existing ratings (read-only)
+                            const SizedBox(height: 12),
+                            if (data['providerRating'] != null)
+                              Row(
+                                children: [
+                                  const Icon(Icons.star, color: Colors.amber),
+                                  const SizedBox(width: 8),
+                                  Text('Provider rating: ${data['providerRating']}'),
+                                ],
+                              ),
+                            if (data['clientRating'] != null) ...[
+                              const SizedBox(height: 8),
+                              Row(
+                                children: [
+                                  const Icon(Icons.star, color: Colors.amber),
+                                  const SizedBox(width: 8),
+                                  Text('Client rating: ${data['clientRating']}'),
+                                ],
+                              ),
+                            ],
+                          ],
+                        ),
+                      ),
+                    ),
+                ],
               ),
             );
           },
@@ -115,65 +203,133 @@ class _RequestDetailsScreenState extends State<RequestDetailsScreen> {
     final double? lat = loc != null ? (loc['lat'] as num?)?.toDouble() : null;
     final double? lng = loc != null ? (loc['lng'] as num?)?.toDouble() : null;
 
+    // Determine an icon for the category
+    final rawCategory = (data['category'] ?? 'Service').toString();
+    final catLower = rawCategory.toLowerCase();
+    IconData categoryIcon;
+    if (catLower.contains('plumb')) categoryIcon = Icons.plumbing;
+    else if (catLower.contains('elect')) categoryIcon = Icons.electrical_services;
+    else if (catLower.contains('clean')) categoryIcon = Icons.cleaning_services;
+    else categoryIcon = Icons.handyman;
+
+    final displayTitle = '${rawCategory[0].toUpperCase()}${rawCategory.substring(1)} needed';
+
     return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
+      crossAxisAlignment: CrossAxisAlignment.center,
       children: [
-        Text(
-          data['category'] ?? 'Unknown',
-          style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
+        // Icon + title centered
+        Row(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(categoryIcon, size: 36, color: Theme.of(context).colorScheme.primary),
+            const SizedBox(width: 12),
+            Flexible(
+              child: Text(
+                displayTitle,
+                style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
+                textAlign: TextAlign.center,
+              ),
+            ),
+          ],
         ),
+
         const SizedBox(height: 8),
-        Text(data['description'] ?? ''),
-        const SizedBox(height: 12),
-        Chip(
-          label: Text(
-            (data['urgent'] == true) ? 'Urgent' : 'Standard',
-            style: const TextStyle(color: Colors.white),
+
+        // Description centered
+        if ((data['description'] as String?)?.isNotEmpty ?? false)
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 8.0),
+            child: Text(
+              data['description'] ?? '',
+              textAlign: TextAlign.center,
+              style: const TextStyle(color: Colors.grey),
+            ),
           ),
-          backgroundColor: (data['urgent'] == true)
-              ? Theme.of(context).colorScheme.error
-              : Theme.of(context).colorScheme.secondary,
-        ),
+
         const SizedBox(height: 12),
+
+        // Urgency chip centered (rename 'Standard' -> 'Scheduled' and include preferred date if present)
+        Center(
+          child: Builder(builder: (context) {
+            final preferred = data['preferredDate'];
+            DateTime? preferredDate;
+            if (preferred is Timestamp) preferredDate = preferred.toDate();
+            else if (preferred is DateTime) preferredDate = preferred;
+
+            final isUrgent = data['urgent'] == true;
+            String chipLabel;
+            if (isUrgent) {
+              chipLabel = 'Urgent';
+            } else if (preferredDate != null) {
+              final pd = preferredDate;
+              chipLabel = 'Scheduled · ${pd.day}/${pd.month}/${pd.year}';
+            } else {
+              chipLabel = 'Scheduled';
+            }
+
+            final bgColor = isUrgent ? Theme.of(context).colorScheme.error : Theme.of(context).colorScheme.secondary;
+            // Use onSecondary for readable text on yellow-like backgrounds
+            final textColor = isUrgent ? Colors.white : Theme.of(context).colorScheme.onSecondary;
+
+            return Chip(
+              backgroundColor: bgColor,
+              label: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  if (!isUrgent) Icon(Icons.calendar_today, size: 14, color: textColor),
+                  if (!isUrgent) const SizedBox(width: 6),
+                  Text(
+                    chipLabel,
+                    style: TextStyle(color: textColor, fontWeight: isUrgent ? FontWeight.bold : FontWeight.w600),
+                  ),
+                ],
+              ),
+            );
+          }),
+        ),
+
+        const SizedBox(height: 12),
+
         if (lat != null && lng != null)
-          Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              SizedBox(
-                height: 180,
-                child: ClipRRect(
-                  borderRadius: BorderRadius.circular(12),
-                  child: FlutterMap(
-                    options: MapOptions(
-                      initialCenter: LatLng(lat, lng),
-                      initialZoom: 15,
+          Center(
+            child: Column(
+              children: [
+                SizedBox(
+                  height: 180,
+                  child: ClipRRect(
+                    borderRadius: BorderRadius.circular(12),
+                    child: FlutterMap(
+                      options: MapOptions(
+                        initialCenter: LatLng(lat, lng),
+                        initialZoom: 15,
+                      ),
+                      children: [
+                        TileLayer(
+                          urlTemplate: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
+                          userAgentPackageName: 'com.example.brikool_mobile',
+                        ),
+                        MarkerLayer(
+                          markers: [
+                            Marker(
+                              point: LatLng(lat, lng),
+                              width: 40,
+                              height: 40,
+                              child: Icon(Icons.location_pin, color: Theme.of(context).colorScheme.secondary, size: 40),
+                            ),
+                          ],
+                        ),
+                      ],
                     ),
-                    children: [
-                      TileLayer(
-                        urlTemplate: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
-                        userAgentPackageName: 'com.example.brikool_mobile',
-                      ),
-                      MarkerLayer(
-                        markers: [
-                          Marker(
-                            point: LatLng(lat, lng),
-                            width: 40,
-                            height: 40,
-                            child: Icon(Icons.location_pin, color: Theme.of(context).colorScheme.secondary, size: 40),
-                          ),
-                        ],
-                      ),
-                    ],
                   ),
                 ),
-              ),
-              const SizedBox(height: 8),
-              TextButton.icon(
-                onPressed: () => _openInMaps(lat, lng),
-                icon: Icon(Icons.map, color: Theme.of(context).colorScheme.secondary),
-                label: const Text('Open in Maps'),
-              ),
-            ],
+                const SizedBox(height: 8),
+                TextButton.icon(
+                  onPressed: () => _openInMaps(lat, lng),
+                  icon: Icon(Icons.map, color: Theme.of(context).colorScheme.secondary),
+                  label: const Text('Open in Maps'),
+                ),
+              ],
+            ),
           )
         else if (loc != null)
           Text('Location: (${loc['lat']}, ${loc['lng']})', style: const TextStyle(color: Colors.grey)),
@@ -181,42 +337,50 @@ class _RequestDetailsScreenState extends State<RequestDetailsScreen> {
     );
   }
 
-  Widget _offersSection(DocumentReference jobRef, bool isProvider, Map<String, dynamic> jobData) {
+  Widget _offersSliver(DocumentReference jobRef, bool isProvider, Map<String, dynamic> jobData) {
     if (isProvider) {
-      return const Text('Offers are hidden for providers');
+      return const SliverToBoxAdapter(
+        child: Padding(
+          padding: EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+          child: Text('Offers are hidden for providers'),
+        ),
+      );
     }
 
     final jobStatus = jobData['status'] as String? ?? 'open';
     final jobClientId = jobData['clientId'] as String?;
 
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        const Text(
-          'Offers',
-          style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
-        ),
-        const SizedBox(height: 12),
-        StreamBuilder<QuerySnapshot>(
-          stream: jobRef.collection('offers').orderBy('createdAt', descending: true).snapshots(),
-          builder: (context, snapshot) {
-            if (snapshot.hasError) {
-              return const Text('Failed to load offers');
-            }
+    return StreamBuilder<QuerySnapshot>(
+      stream: jobRef.collection('offers').orderBy('createdAt', descending: true).snapshots(),
+      builder: (context, snapshot) {
+        if (snapshot.hasError) {
+          return const SliverToBoxAdapter(child: Padding(padding: EdgeInsets.all(16), child: Text('Failed to load offers')));
+        }
 
-            if (!snapshot.hasData || snapshot.data!.docs.isEmpty) {
-              return const Text('No offers yet');
-            }
+        if (!snapshot.hasData || snapshot.data!.docs.isEmpty) {
+          return const SliverToBoxAdapter(
+            child: Padding(
+              padding: EdgeInsets.all(16),
+              child: Text('No offers yet'),
+            ),
+          );
+        }
 
-            return Column(
-              children: snapshot.data!.docs.map((doc) {
-                final offer = doc.data() as Map<String, dynamic>;
-                final offerId = doc.id;
-                final providerName = offer['providerName'] ?? 'Provider';
-                final message = offer['message'] ?? '';
-                final price = offer['price'] ?? '';
+        final docs = snapshot.data!.docs;
 
-                return Card(
+        return SliverList(
+          delegate: SliverChildBuilderDelegate(
+            (context, index) {
+              final doc = docs[index];
+              final offer = doc.data() as Map<String, dynamic>;
+              final offerId = doc.id;
+              final providerName = offer['providerName'] ?? 'Provider';
+              final message = offer['message'] ?? '';
+              final price = offer['price'] ?? '';
+
+              return Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                child: Card(
                   child: ListTile(
                     title: Text(providerName),
                     subtitle: Column(
@@ -234,12 +398,13 @@ class _RequestDetailsScreenState extends State<RequestDetailsScreen> {
                           )
                         : null,
                   ),
-                );
-              }).toList(),
-            );
-          },
-        ),
-      ],
+                ),
+              );
+            },
+            childCount: docs.length,
+          ),
+        );
+      },
     );
   }
 
@@ -305,12 +470,91 @@ class _RequestDetailsScreenState extends State<RequestDetailsScreen> {
         'createdAt': FieldValue.serverTimestamp(),
       });
 
+      // Mark that offers were updated so the client can be notified
+      await jobRef.update({'offersUpdatedAt': FieldValue.serverTimestamp()});
+
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Offer sent')));
     } catch (e) {
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Failed to send offer: $e')));
     } finally {
       setState(() => _submitting = false);
+    }
+  }
+
+  Future<void> _showRatingDialog(DocumentReference jobRef, {required String target}) async {
+    // target: 'provider' (client rates provider) or 'client' (provider rates client)
+    int rating = 5;
+    final commentController = TextEditingController();
+
+    final result = await showDialog<bool>(
+      context: context,
+      builder: (context) {
+        return AlertDialog(
+          title: Text(target == 'provider' ? 'Rate provider' : 'Rate client'),
+          content: StatefulBuilder(builder: (context, setState) {
+            return Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: List.generate(5, (i) {
+                    final starIndex = i + 1;
+                    return IconButton(
+                      onPressed: () => setState(() => rating = starIndex),
+                      icon: Icon(
+                        starIndex <= rating ? Icons.star : Icons.star_border,
+                        color: Colors.amber,
+                      ),
+                    );
+                  }),
+                ),
+                TextField(
+                  controller: commentController,
+                  decoration: const InputDecoration(labelText: 'Comment (optional)'),
+                ),
+              ],
+            );
+          }),
+          actions: [
+            TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('Cancel')),
+            ElevatedButton(onPressed: () => Navigator.pop(context, true), child: const Text('Submit')),
+          ],
+        );
+      },
+    );
+
+    if (result == true) {
+      await _submitRating(jobRef, target: target, rating: rating, comment: commentController.text.trim());
+    }
+  }
+
+  Future<void> _submitRating(DocumentReference jobRef, {required String target, required int rating, String? comment}) async {
+    try {
+      final user = FirebaseAuth.instance.currentUser;
+      if (user == null) throw Exception('Not authenticated');
+
+      final Map<String, Object?> update = {};
+      final now = FieldValue.serverTimestamp();
+
+      if (target == 'provider') {
+        update['providerRating'] = rating;
+        update['providerRatingComment'] = comment;
+        update['providerRatedAt'] = now;
+        update['providerRatedBy'] = user.uid;
+      } else {
+        update['clientRating'] = rating;
+        update['clientRatingComment'] = comment;
+        update['clientRatedAt'] = now;
+        update['clientRatedBy'] = user.uid;
+      }
+
+      await jobRef.update(update);
+
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Rating submitted')));
+    } catch (e) {
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Failed to submit rating: $e')));
     }
   }
 
@@ -353,6 +597,7 @@ class _RequestDetailsScreenState extends State<RequestDetailsScreen> {
         'assignedProviderName': offer['providerName'] ?? null,
         'assignedPrice': offer['price'] ?? null,
         'assignedAt': FieldValue.serverTimestamp(),
+        'statusUpdatedAt': FieldValue.serverTimestamp(),
       });
 
       await jobRef.collection('offers').doc(offerId).update({'accepted': true, 'acceptedAt': FieldValue.serverTimestamp()});
@@ -380,7 +625,7 @@ class _RequestDetailsScreenState extends State<RequestDetailsScreen> {
     if (confirm != true) return;
 
     try {
-      await jobRef.update({'status': 'completed', 'completedAt': FieldValue.serverTimestamp()});
+      await jobRef.update({'status': 'completed', 'completedAt': FieldValue.serverTimestamp(), 'statusUpdatedAt': FieldValue.serverTimestamp()});
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Job marked completed')));
     } catch (e) {
@@ -428,13 +673,22 @@ class _RequestDetailsScreenState extends State<RequestDetailsScreen> {
       case 'open':
         return Row(
           children: [
-            const Chip(
-              label: Text('Waiting for offers'),
-              avatar: Icon(Icons.hourglass_top, color: Colors.orange),
-              backgroundColor: Color(0xFFFFF3E0),
+            Chip(
+              label: Text('Waiting for offers', style: TextStyle(color: Colors.orange[900], fontWeight: FontWeight.w600)),
+              avatar: const Icon(Icons.hourglass_top, color: Colors.orange),
+              backgroundColor: const Color(0xFFFFF3E0),
             ),
             const SizedBox(width: 8),
-            if (isClient) const Text('Your request is open and waiting for offers.', style: TextStyle(color: Colors.grey)),
+            if (isClient)
+              Expanded(
+                child: Text(
+                  'Your request is open and waiting for offers.',
+                  style: const TextStyle(color: Colors.grey),
+                  softWrap: true,
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ),
           ],
         );
       case 'assigned':
@@ -448,7 +702,14 @@ class _RequestDetailsScreenState extends State<RequestDetailsScreen> {
               backgroundColor: Color(0xFFE3F2FD),
             ),
             const SizedBox(width: 8),
-            Expanded(child: Text('Assigned to $providerName ${price.isNotEmpty ? '· $price' : ''}')),
+            Expanded(
+              child: Text(
+                'Assigned to $providerName ${price.isNotEmpty ? '· $price' : ''}',
+                softWrap: true,
+                maxLines: 2,
+                overflow: TextOverflow.ellipsis,
+              ),
+            ),
           ],
         );
       case 'completed':
@@ -466,7 +727,15 @@ class _RequestDetailsScreenState extends State<RequestDetailsScreen> {
               backgroundColor: Theme.of(context).chipTheme.backgroundColor,
             ),
             const SizedBox(width: 8),
-            Text(dateText.isNotEmpty ? 'Completed on $dateText' : 'Completed', style: const TextStyle(color: Colors.grey)),
+            Expanded(
+              child: Text(
+                dateText.isNotEmpty ? 'Completed on $dateText' : 'Completed',
+                style: const TextStyle(color: Colors.grey),
+                softWrap: true,
+                maxLines: 2,
+                overflow: TextOverflow.ellipsis,
+              ),
+            ),
           ],
         );
       default:

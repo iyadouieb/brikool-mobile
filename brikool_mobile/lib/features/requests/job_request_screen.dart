@@ -4,6 +4,7 @@ import 'package:flutter_map/flutter_map.dart';
 import 'package:latlong2/latlong.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import '../../widgets/app_logo.dart';
 import 'request_details_screen.dart';
 
 
@@ -144,7 +145,15 @@ class _JobRequestScreenState extends State<JobRequestScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: Text(widget.category),
+        centerTitle: true,
+        title: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            AppLogo(),
+            const SizedBox(height: 4),
+            Text(widget.category, style: Theme.of(context).textTheme.titleMedium),
+          ],
+        ),
       ),
 
       // 🔘 FIXED BUTTON

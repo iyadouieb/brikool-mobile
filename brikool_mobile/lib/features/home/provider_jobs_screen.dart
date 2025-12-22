@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import '../../widgets/app_logo.dart';
 import '../requests/request_details_screen.dart';
 
 class ProviderJobsScreen extends StatelessWidget {
@@ -24,7 +25,10 @@ class ProviderJobsScreen extends StatelessWidget {
         .snapshots();
 
     return Scaffold(
-      appBar: AppBar(title: const Text('My Jobs')),
+      appBar: AppBar(
+        centerTitle: true,
+        title: AppLogo(),
+      ),
       body: StreamBuilder<QuerySnapshot>(
         stream: stream,
         builder: (context, snapshot) {
