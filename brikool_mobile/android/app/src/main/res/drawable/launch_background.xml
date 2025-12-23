@@ -1,12 +1,19 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- Modify this file to customize your launch splash screen -->
+<!-- Brand-themed launch background: colored background + centered app icon -->
 <layer-list xmlns:android="http://schemas.android.com/apk/res/android">
-    <item android:drawable="@android:color/white" />
 
-    <!-- You can insert your own image assets here -->
-    <!-- <item>
+    <!-- Background: use the app's accent color (amber) -->
+    <item>
+        <shape android:shape="rectangle">
+            <solid android:color="#FFFFC107" />
+        </shape>
+    </item>
+
+    <!-- Centered app icon (mipmap/ic_launcher) -->
+    <item>
         <bitmap
             android:gravity="center"
-            android:src="@mipmap/launch_image" />
-    </item> -->
+            android:src="@mipmap/ic_launcher" />
+    </item>
+
 </layer-list>

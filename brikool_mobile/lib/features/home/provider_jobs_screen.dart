@@ -27,7 +27,7 @@ class ProviderJobsScreen extends StatelessWidget {
     return Scaffold(
       appBar: AppBar(
         centerTitle: true,
-        title: AppLogo(),
+        //title: AppLogo(),
       ),
       body: StreamBuilder<QuerySnapshot>(
         stream: stream,

@@ -37,7 +37,7 @@ class AuthGate extends StatelessWidget {
 
               final data = userSnapshot.data?.data() as Map<String, dynamic>?;
 
-              if (data == null || !data.containsKey('role')) {
+              if (data == null || !data.containsKey('role') || data['role'] == null) {
                 return const RoleSelectionScreen();
               }
 
